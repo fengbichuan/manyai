@@ -25,7 +25,7 @@ import { ref, onMounted } from 'vue'
 const question = ref('')                     // 用户当前输入的问题
 const placeholder = ref('请输入您的问题…')    // 动态提示语占位符
 const suggestions = ref([                   // 智能提示按钮示例
-  '天气如何？',
+  '上海天气如何？',
   '告诉我一个笑话',
   '今天的新闻头条是什么？'
 ])
@@ -64,10 +64,10 @@ onMounted(() => {
 
 <style scoped>
 .input-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  top: 10px;  /* 控制输入框距离页面顶部的距离 */
+  left: 50%;
+  transform: translateX(-50%);  /* 水平居中 */
   padding: 10px;
   background: #fff;
   border-bottom: 1px solid #ddd;
@@ -76,6 +76,8 @@ onMounted(() => {
   gap: 8px;
   z-index: 1000;
 }
+
+
 .input-bar input {
   flex: 1;
   padding: 8px;
