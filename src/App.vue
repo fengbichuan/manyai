@@ -69,7 +69,19 @@ export default {
 
         console.log('AI Answer:', answer);
         // 将后端返回的答案保存到响应式数据中
+        responses.value['GPT'] = {
+          content: answer,
+          done: true,
+          responseTime: elapsedTimeInSeconds.toFixed(1),  // 保留一位小数
+          confidence: confidence
+        };
         responses.value['DeepSeek'] = {
+          content: answer,
+          done: true,
+          responseTime: elapsedTimeInSeconds.toFixed(1),  // 保留一位小数
+          confidence: confidence
+        };
+        responses.value['Kimi'] = {
           content: answer,
           done: true,
           responseTime: elapsedTimeInSeconds.toFixed(1),  // 保留一位小数
