@@ -35,19 +35,19 @@
 
 <script>
 export default {
-    name: 'AppSideBar',
-    props: {
-        collapsed: {
-            type: Boolean,
-            required: true
-        }
+  name: 'AppSideBar',
+  props: {
+    collapsed: {
+      type: Boolean,
+      required: true
     },
-    activeView: {
+    activeView: {  // 修正 prop 声明
       type: String,
-      default: 'chat'
-    },
-    emits: ['toggle'],
-    methods: {
+      required: true
+    }
+  },
+  emits: ['toggle', 'view-change'],
+  methods: {
     changeView(view) {
       this.$emit('view-change', view)
     }
