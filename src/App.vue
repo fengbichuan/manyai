@@ -201,8 +201,8 @@ export default {
         }
 
         // 增量更新逻辑保持不变
-        if (data.content) responses.value[ai].content += data.content;
-        if (data.reasoning) responses.value[ai].reasoning += data.reasoning;
+        if (data.content) responses.value[ai].content = data.content;
+        if (data.reasoning) responses.value[ai].reasoning = data.reasoning;
         if (data.done) responses.value[ai].done = true;
         if (data.time) responses.value[ai].time = data.time; // 同步time字段
       }

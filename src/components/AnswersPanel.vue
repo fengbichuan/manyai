@@ -1,22 +1,22 @@
-<!-- AnswersPanel.vue -->
 <template>
   <div :class="['answers-panel', mode]">
     <div 
       v-for="ai in aiList" 
       :key="ai.name" 
       class="ai-container"
+      :class="{ 'collapsed': responses[ai.name]?.done }"
     >
+      <ChainGraph 
+        class="chain-graph"
+        :chain-data="getChainData(ai.name)"
+        :current-step="getCurrentStep(ai.name)"
+      />
       <AiCard 
         :name="ai.name"
         :logo="ai.logo"
         :content="responses[ai.name]?.content || ''"
         :done="responses[ai.name]?.done"
         :response-time="responses[ai.name]?.time / 1000 || 0"
-      />
-      <ChainGraph 
-        class="chain-graph"
-        :chain-data="getChainData(ai.name)"
-        :current-step="getCurrentStep(ai.name)"
       />
     </div>
   </div>
@@ -46,12 +46,21 @@ const chainSteps = computed(() => {
 
 // 处理思维链数据
 const processReasoning = (reasoning) => {
-  return (reasoning || '').split('\n')
-    .filter(line => line.trim())
+  // 增强中文标点处理和多级分割
+  return (reasoning || '')
+    // 使用正向预查保留分隔符到前一个段落
+    .split(/(?<=[。！？.?])\n+/)
+    .filter(segment => {
+      // 过滤空段落和纯空格段落
+      return segment.trim().length > 0
+    })
     .map((text, index) => ({
       step: index + 1,
-      info: text,
-      timestamp: Date.now() + index
+      info: text
+        .replace(/\n/g, ' ')    // 段落内换行转空格
+        .replace(/\s+/g, ' ')   // 合并连续空格
+        .trim(),
+      timestamp: Date.now() + index * 1000
     }))
 }
 
@@ -78,29 +87,46 @@ const getCurrentStep = (aiName) => {
 
 .ai-container {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-rows: auto 1fr;
   gap: 20px;
   background: #fff;
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+/* 折叠状态下的样式 */
+.ai-container.collapsed .chain-graph {
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  transition: all 0.3s ease;
 }
 
 .chain-graph {
   height: 200px;
-  border-left: 1px solid #eee;
-  padding-left: 20px;
+  transition: all 0.3s ease;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 @media (max-width: 768px) {
   .ai-container {
-    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
+  
   .chain-graph {
-    border-left: none;
-    padding-left: 0;
-    border-top: 1px solid #eee;
-    padding-top: 16px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 16px;
+    margin-bottom: 12px;
+  }
+  
+  .ai-container.collapsed .chain-graph {
+    border-bottom: none;
   }
 }
 </style>

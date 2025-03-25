@@ -1,12 +1,21 @@
 <template>
-  <!-- WebGL Canvas 用于绘制思维链 -->
-  <canvas ref="canvas" class="chain-canvas"></canvas>
+  <!-- 添加根元素 -->
+  <div :class="$attrs.class"> <!-- 继承父级传递的class -->
+    <canvas ref="canvas" class="chain-canvas"></canvas>
+    <!-- 调试信息 -->
+    <div v-if="chainData.length === 0" class="debug-info">
+      No chain data received (steps: {{ chainData.length }})
+    </div>
+  </div>
 </template>
 
 <script setup>
 
 import { onMounted, watch, ref } from 'vue'
 
+defineOptions({
+  inheritAttrs: false
+})
 // 定义组件的 props
 const props = defineProps({
   chainData: { type: Array, default: () => [] },      // 思维链步骤数据数组
@@ -119,8 +128,8 @@ onMounted(() => {
 <style scoped>
 .chain-canvas {
   width: 100%;
-  height: 300px;
-  display: block;
-  margin-top: 16px;
+  height: 200px;
+  background: #f8f9fa; /* 增加背景色方便识别 */
+  border: 1px dashed #eee; /* 调试用边框 */
 }
 </style>
