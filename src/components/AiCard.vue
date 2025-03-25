@@ -1,91 +1,113 @@
+<!-- AiCard.vue -->
 <template>
   <div class="ai-card">
-    <!-- 卡片顶部：AI Logo和名称 -->
     <div class="header">
       <img v-if="logo" :src="logo" :alt="name" class="logo" />
-      <span class="name">{{ name }}</span>
-      <span class="time" v-if="responseTime">耗时: {{ responseTime }}s</span>
+      <div class="meta">
+        <span class="name">{{ name }}</span>
+        <span class="time" v-if="responseTime">· {{ responseTime.toFixed(1) }}s</span>
+      </div>
     </div>
 
-    <!-- 回答内容，流式追加文本 -->
     <div class="content">
-      {{ content }}
-      <span v-if="!done" class="cursor">|</span>  <!-- 未完成时显示光标动画 -->
+      <template v-for="(line, index) in contentLines" :key="index">
+        <span class="content-line">{{ line }}</span>
+      </template>
+      <span v-if="!done" class="cursor">|</span>
     </div>
   </div>
 </template>
 
 <script setup>
-defineProps({
-  name: {
-    type: String,
-    required: true
-  },
-  logo: {
-    type: String,
-    required: true
-  },
-  content: {
-    type: String,
-    required: true
-  },
-  done: {
-    type: Boolean,
-    required: true
-  },
-  responseTime: {
-    type: Number,
-    default: 0
-  },
-  confidence: {
-    type: Number,
-    default: 0
-  }
-})
+import { computed } from 'vue';
+
+const props = defineProps({
+  name: String,
+  logo: String,
+  content: String,
+  done: Boolean,
+  responseTime: Number
+});
+
+const contentLines = computed(() => {
+  return props.content.split('\n').filter(l => l.trim());
+});
 </script>
 
 <style scoped>
 .ai-card {
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  background: #f9f9f9;
-  padding: 12px;
-  margin: 8px 4px;
-  max-width: 600px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
+
 .header {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
+
 .logo {
-  width: 24px;
-  height: 24px;
-  margin-right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  margin-right: 10px;
 }
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .name {
-  font-weight: bold;
-  font-size: 16px;
-}
-.time, .confidence {
-  font-size: 0.9em;
-  color: #555;
-  margin-left: auto;
-  margin-right: 0;
-  /* 使用 margin-left: auto 将耗时和置信度推到最右 */
-}
-.content {
-  white-space: pre-wrap;  /* 保留换行并自动折行 */
+  font-weight: 600;
   font-size: 15px;
-  line-height: 1.5;
+  color: #333;
 }
+
+.time {
+  font-size: 13px;
+  color: #666;
+}
+
+.content-container {
+  display: grid;
+  gap: 12px;
+}
+
+.content-line {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.reasoning-preview {
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.reasoning-header {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.reasoning-content {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .cursor {
-  display: inline-block;
-  width: 2px;
-  background-color: #666;
-  /* 光标动画效果 */
-  animation: blink 1s step-start 0s infinite;
+  animation: blink 1s step-end infinite;
 }
+
 @keyframes blink {
   50% { opacity: 0; }
 }
