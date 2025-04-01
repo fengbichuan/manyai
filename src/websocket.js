@@ -9,7 +9,7 @@ export function useAIWebSocket(url, aiList) {
         name,
         content: '',          // 主回答内容
         reasoning: '',        // 思考过程内容
-        done: false,
+        done: false,           // 是否完成
         responseTime: 0,      // 单位：秒
         confidence: null,     // 置信度
         error: null,          // 错误信息
@@ -78,15 +78,6 @@ export function useAIWebSocket(url, aiList) {
       debugLog('未知AI', `无法识别的AI名称: ${aiName}`)
       return null
     }
-
-    // 验证数据结构完整性
-    const requiredFields = ['content', 'reasoning', 'done', 'time']
-    const missingFields = requiredFields.filter(field => !(field in data))
-    if (missingFields.length > 0) {
-      debugLog('结构异常', `缺少字段: ${missingFields.join(', ')}`)
-      return null
-    }
-
     return aiName
   }
 
