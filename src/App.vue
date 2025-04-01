@@ -18,7 +18,7 @@
           <section v-if="showAnswers && activeView === 'chat'" class="response-section" key="response-section">
             <AnswersPanel :mode="displayMode" :ai-list="aiList" :responses="processedResponses" />
           </section>
-          
+
         </transition>
       </div>
     </main>
@@ -109,7 +109,7 @@ export default {
         answers: { ...answers },
         fullResponses: { ...responses.value }
       };
-
+      console.log('Attempting to save history item:', newItem);
       history.value.unshift(newItem);
       if (history.value.length > 100) history.value.pop();
       localStorage.setItem('chatHistory', JSON.stringify(history.value));
@@ -128,28 +128,27 @@ export default {
       try {
         await sendQuestion(questionText);
 
-        const checkCompletion = () => {
-          const allDone = Object.values(responses.value).every(r => r?.done);
-          if (allDone) {
-            addHistoryItem(questionText, responses.value);
-          }
-        };
+    // 修改 timer interval
+    const timer = setInterval(() => {
+          const allDone = Object.values(responses.value).every(r => r?.done); // 在这里检查完成状态
 
-        const completionCheckInterval = setInterval(checkCompletion, 500);
-
-        const timer = setInterval(() => {
-          if (!Object.values(responses.value).every(r => r?.done)) {
+          if (!allDone) {
+            // 如果没完成，更新显示时间
             const elapsed = Number((performance.now() - requestStartTime.value) / 1000);
             Object.keys(responses.value).forEach(ai => {
-              if (!responses.value[ai]?.done) {
-                responses.value[ai].responseTime = elapsed.toFixed(1);
+              // 确保 responses.value[ai] 存在再访问
+              if (responses.value[ai] && !responses.value[ai].done) {
+                 responses.value[ai].responseTime = elapsed.toFixed(1);
               }
             });
           } else {
-            clearInterval(timer);
-            clearInterval(completionCheckInterval);
+            // 如果完成了！
+            addHistoryItem(questionText, responses.value); // *** 在这里调用保存 ***
+
+            clearInterval(timer); // 清除自己
+            // 不再需要清除 completionCheckInterval，因为它已被移除
           }
-        }, 100);
+        }, 100); // 检查频率可以根据需要调整，100ms 通常没问题
 
       } catch (error) {
         console.error('Error:', error);
