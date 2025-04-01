@@ -10,8 +10,8 @@
         :logo="ai.logo"
         :content="responses[ai.name]?.content || ''"
         :reasoning-steps="getChainData(ai.name)"
-        :done="responses[ai.name]?.done"
-        :response-time="responses[ai.name]?.time / 1000 || 0"
+        :done="responses[ai.name]?.done || false"
+        :response-time="responses[ai.name]?.time / 1000*1000|| 0"
       />
     </div>
   </div>

@@ -18,6 +18,7 @@
           <section v-if="showAnswers && activeView === 'chat'" class="response-section" key="response-section">
             <AnswersPanel :mode="displayMode" :ai-list="aiList" :responses="processedResponses" />
           </section>
+          
         </transition>
       </div>
     </main>

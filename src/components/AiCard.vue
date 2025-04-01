@@ -4,7 +4,7 @@
       <img v-if="logo" :src="logo" :alt="name" class="logo" />
       <div class="meta">
         <span class="name">{{ name }}</span>
-        <span class="time" v-if="responseTime">· {{ responseTime.toFixed(1) }}s</span>
+        <span class="time" v-if="responseTime">· {{ responseTime.toFixed(1) }}</span>
       </div>
     </div>
 
@@ -72,7 +72,8 @@ watch(() => props.done, (newVal) => {
 onMounted(() => {
   console.log('[AiCard] 初始 props:', {
     done: props.done,
-    name: props.name
+    name: props.name,
+    responseTime: props.responseTime,
   });
 });
 
@@ -184,18 +185,6 @@ const contentLines = computed(() => {
   transform: rotate(180deg);
 }
 
-.reasoning-steps {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease-out;
-  margin-top: 4px;
-}
-
-.reasoning-steps.visible {
-  max-height: 1000px;
-  padding: 4px 0;
-}
-
 .step {
   padding: 8px 12px;
   margin: 4px 0;
@@ -203,7 +192,6 @@ const contentLines = computed(() => {
   border-radius: 4px;
   font-size: 13px;
   line-height: 1.5;
-  animation: fadeIn 0.3s ease;
 }
 
 .step-index {
@@ -225,8 +213,4 @@ const contentLines = computed(() => {
   50% { opacity: 0; }
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 </style>
