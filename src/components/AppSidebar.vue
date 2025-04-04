@@ -10,7 +10,7 @@
                 <h1>Many AI</h1>
             </div>
             <ul class="nav-menu">
-                <li class="nav-item" :class="{ active: activeView === 'chat' }" @click="changeView('chat')">
+                  <li class="nav-item" :class="{ active: activeView === 'chat' }" @click="handleNewConversationClick">
                     <a href="#" class="nav-link">
                         <span class="icon">➕</span>
                         <span class="text">开启新对话</span>
@@ -41,15 +41,58 @@ export default {
       type: Boolean,
       required: true
     },
-    activeView: {  // 修正 prop 声明
+    activeView: {
       type: String,
       required: true
     }
   },
-  emits: ['toggle', 'view-change'],
+  // 声明会触发的事件，增加了 'new-conversation-created'
+  emits: ['toggle', 'view-change', 'new-conversation-created'],
   methods: {
+    // 通用的视图切换方法，只负责触发 view-change 事件
     changeView(view) {
       this.$emit('view-change', view)
+    },
+    // 处理“开启新对话”点击的专属方法
+    async handleNewConversationClick() {
+      // 1. 切换视图（如果需要的话，父组件会处理）
+      this.changeView('chat');
+
+      // 2. 发起 API 请求创建新对话
+      try {
+        const response = await fetch('http://localhost:8082/api/coze/create', {
+          method: 'POST',
+          headers: {
+            // 如果API需要，可以添加 Content-Type 等头信息
+            'Content-Type': 'application/json',
+            // 'Accept': 'application/json' // 根据API要求添加
+          },
+          // 如果API需要 body，可以在这里添加
+          // body: JSON.stringify({ /* some data if needed */ })
+        });
+
+        if (!response.ok) {
+          // 处理 HTTP 错误状态 (例如 404, 500)
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // 3. 检查返回的数据并提取 conversationId
+        if (data && data.conversationId) {
+          console.log('New conversation created, ID:', data.conversationId);
+          // 4. 触发新事件，将 conversationId 传递给父组件
+          this.$emit('new-conversation-created', data.conversationId);
+        } else {
+          console.error('Failed to get conversationId from response:', data);
+          // 这里可以添加错误处理逻辑，例如通知用户
+        }
+
+      } catch (error) {
+        // 处理网络错误或 JSON 解析错误
+        console.error('Error creating new conversation:', error);
+        // 这里可以添加错误处理逻辑，例如通知用户创建失败
+      }
     }
   }
 }
@@ -185,4 +228,6 @@ export default {
         left: 10px;
     }
 }
+
+
 </style>
