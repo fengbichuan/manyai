@@ -1,8 +1,12 @@
 <template>
-
   <div id="app" class="app-container">
-    <AppSideBar :collapsed="sidebarCollapsed" :active-view="activeView" @toggle="toggleSidebar"
-      @view-change="handleViewChange" />
+    <AppSideBar
+      :collapsed="sidebarCollapsed"
+      :active-view="activeView"
+      @toggle="toggleSidebar"
+      @view-change="handleViewChange"
+      @new-conversation-created="handleNewConversation" 
+    />
 
     <!-- 主内容区域 -->
     <main class="main-content" :style="{ marginLeft: sidebarCollapsed ? '80px' : '280px' }">
@@ -16,12 +20,12 @@
         <!-- 聊天回答视图 -->
         <transition name="answers-fade">
           <section v-if="showAnswers && activeView === 'chat'" class="response-section" key="response-section">
+            <!-- Optional: Display convId for debugging -->
+            <!-- <p>Debug: Current ConvID = {{ convId || 'None' }}</p> -->
             <AnswersPanel :mode="displayMode" :ai-list="aiList" :responses="processedResponses" />
           </section>
-
         </transition>
       </div>
-
     </main>
 
     <!-- 聊天输入框（仅在聊天视图显示） -->
@@ -34,9 +38,9 @@
 </template>
 
 <script>
+// Keep imports as they are
 import { ref, watch, onMounted, computed, reactive } from 'vue';
-// Import reactive if initializing response objects directly
-import { useAIWebSocket, askCoze } from './websocket.js';
+import { useAIWebSocket, askCoze } from './websocket.js'; // Ensure askCoze is correctly imported
 import AnswersPanel from './components/AnswersPanel.vue';
 import AssistTouch from './components/AssistTouch.vue';
 import AppSideBar from './components/AppSidebar.vue';
@@ -59,104 +63,84 @@ export default {
     const history = ref([]);
     const showAnswers = ref(false);
     const hasFirstQuestion = ref(false);
-    const displayMode = ref('parallel'); // Assuming you might use this
-    const responses = ref({}); // Main state object for ALL AI responses
-    const requestStartTime = ref(null); // Overall start time for the request group
+    const displayMode = ref('parallel');
+    const responses = ref({});
+    const requestStartTime = ref(null);
+    const convId = ref(null); // <-- Add state for Conversation ID
 
     const aiList = [
       { name: 'GPT', logo: require('@/assets/chatgpt.png') },
       { name: 'DeepSeek', logo: require('@/assets/deepseek.png') },
       { name: 'Kimi', logo: require('@/assets/kimi.png') },
-      { name: 'coze', logo: require('@/assets/coze.png') }, // Keep coze here for UI list
+      { name: 'coze', logo: require('@/assets/coze.png') },
     ];
 
-    // --- WebSocket Setup (Filter out 'coze') ---
+    // --- WebSocket Setup ---
     const wsAiNames = aiList.filter(ai => ai.name !== 'coze').map(ai => ai.name);
-    // Pass only WebSocket-relevant AI names to the composable
     const { responses: wsResponses, sendQuestion } = useAIWebSocket('ws://localhost:8082/chat', wsAiNames);
 
     // --- Computed Property for Display ---
-    // This computed property now primarily relies on the local `responses` ref
     const processedResponses = computed(() => {
-      // Ensure all AIs from aiList have an entry, even if empty initially
       const processed = {};
       aiList.forEach(ai => {
         const responseData = responses.value[ai.name];
         processed[ai.name] = {
-          name: ai.name, // Ensure name is always present
+          name: ai.name,
           content: responseData?.content || '',
           reasoning: responseData?.reasoning || '',
           done: responseData?.done || false,
-          responseTime: responseData?.responseTime?.toString() || '0.0', // Ensure string format if needed by component
-          confidence: responseData?.confidence || null, // Use null or a default
+          responseTime: responseData?.responseTime?.toString() || '0.0',
+          confidence: responseData?.confidence || null,
           error: responseData?.error || null,
           lastUpdated: responseData?.lastUpdated || 0,
-          // Add other fields your AnswersPanel might expect
         };
       });
-      // console.log('Processed Responses:', JSON.stringify(processed));
       return processed;
     });
 
-    // --- Watch WebSocket Responses and Update Local State ---
-    // This watcher now only handles updates for GPT, DeepSeek, Kimi from the WebSocket
+    // --- Watch WebSocket Responses ---
     watch(wsResponses, (newWsData) => {
-      // console.log("WebSocket Data Received:", JSON.stringify(newWsData));
       for (const [aiName, data] of Object.entries(newWsData)) {
-        if (responses.value[aiName]) { // Update existing entry if handleQuestion initialized it
-          // Only update if data exists to avoid overwriting Coze's final state potentially
-          if (data.content !== undefined) responses.value[aiName].content = data.content;
-          if (data.reasoning !== undefined) responses.value[aiName].reasoning = data.reasoning;
-          if (data.responseTime !== undefined) responses.value[aiName].responseTime = data.responseTime; // WS provides this
-          if (data.confidence !== undefined) responses.value[aiName].confidence = data.confidence;
-          if (data.error !== undefined) responses.value[aiName].error = data.error;
-          if (data.lastUpdated !== undefined) responses.value[aiName].lastUpdated = data.lastUpdated;
-          // Crucially, update 'done' status
-          if (data.done !== undefined) responses.value[aiName].done = data.done;
+        if (responses.value[aiName]) {
+            // Only update fields that exist in the incoming data
+            Object.keys(data).forEach(key => {
+                if (key in responses.value[aiName]) {
+                    responses.value[aiName][key] = data[key];
+                }
+            });
         } else {
-          // This case might happen if WS connects/sends before handleQuestion initializes
-          // Or if an AI wasn't in the initial list passed? Handle defensively.
-          console.warn(`Received WS data for unexpected AI: ${aiName}`);
-          // Optionally initialize it here if needed, but initialization in handleQuestion is preferred
-          // responses.value[aiName] = reactive({ ...data, name: aiName });
+          console.warn(`Received WS data for unexpected or uninitialized AI: ${aiName}`);
+           // Initialize defensively if necessary, but handleQuestion should normally do this
+           responses.value[aiName] = reactive({
+               name: aiName,
+               content: data.content || '',
+               reasoning: data.reasoning || '',
+               done: data.done || false,
+               responseTime: data.responseTime || 0,
+               confidence: data.confidence || null,
+               error: data.error || null,
+               lastUpdated: data.lastUpdated || Date.now(), // Add timestamp
+           });
         }
       }
     }, { deep: true });
 
-
-
-    // 历史记录处理方法
-
-    const addHistoryItem = (question, answers) => {
+    // --- History Management ---
+    const addHistoryItem = (question, finalResponses) => {
+      // Consider if convId should also be saved in history if you want to resume later
       const newItem = {
         id: Date.now(),
         timestamp: Date.now(),
         question,
-        answers: { ...answers },
-        fullResponses: { ...responses.value }
+        // Save a deep copy of the final state
+        fullResponses: JSON.parse(JSON.stringify(finalResponses)),
+        // convId: convId.value // Optional: Save conversation ID with history
       };
-      console.log('Attempting to save history item:', newItem);
+      console.log('Saving history item:', newItem);
       history.value.unshift(newItem);
       if (history.value.length > 100) history.value.pop();
       localStorage.setItem('chatHistory', JSON.stringify(history.value));
     };
-
-    // // --- History Management ---
-    // const addHistoryItem = (question, finalResponses) => {
-    //   // Use the structure expected by loadHistory (fullResponses)
-    //   const newItem = {
-    //     id: Date.now(),
-    //     timestamp: Date.now(),
-    //     question,
-    //     // 'answers' might be redundant if 'fullResponses' has everything
-    //     // answers: { ...extractAnswers(finalResponses) }, // Helper function if needed
-    //     fullResponses: JSON.parse(JSON.stringify(finalResponses)) // Deep copy
-    //   };
-    //   console.log('Saving history item:', newItem);
-    //   history.value.unshift(newItem);
-    //   if (history.value.length > 100) history.value.pop();
-    //   localStorage.setItem('chatHistory', JSON.stringify(history.value));
-    // };
 
     // --- Question Handling (Main Logic) ---
     const handleQuestion = async (questionText) => {
@@ -165,120 +149,170 @@ export default {
       console.log(`Handling question: "${questionText}"`);
       showAnswers.value = true;
       hasFirstQuestion.value = true;
-      activeView.value = 'chat'; // Ensure chat view is active
-      requestStartTime.value = performance.now(); // Record overall start
+      // activeView should already be 'chat' if ChatBox is visible, but double-check isn't harmful
+      if (activeView.value !== 'chat') activeView.value = 'chat';
+      requestStartTime.value = performance.now();
 
-      // 1. Initialize/Reset state for ALL AIs (including Coze)
+      // 1. Initialize/Reset state for ALL AIs
       responses.value = aiList.reduce((acc, ai) => {
-        acc[ai.name] = reactive({ // Use reactive for deeper tracking if needed
-          name: ai.name,
-          content: '',
-          reasoning: '',
-          done: false,
-          responseTime: 0,
-          confidence: null,
-          error: null,
-          lastUpdated: 0,
+        acc[ai.name] = reactive({
+          name: ai.name, content: '', reasoning: '', done: false,
+          responseTime: 0, confidence: null, error: null, lastUpdated: 0,
         });
         return acc;
       }, {});
       console.log("Initial responses state:", JSON.stringify(responses.value));
 
-
-      // 2. Trigger WebSocket AIs (don't await, let it run in background)
+      // 2. Trigger WebSocket AIs
       if (wsAiNames.length > 0) {
         console.log("Sending question to WebSocket AIs:", wsAiNames);
-        sendQuestion(questionText); // Assumes sendQuestion uses the wsAiNames it was initialized with
+        sendQuestion(questionText);
       }
 
-      // 3. Trigger Coze API call (await this specific call)
+      // 3. Trigger Coze API call (using dynamic convId)
       const cozeAiInfo = aiList.find(ai => ai.name === 'coze');
       if (cozeAiInfo) {
-        console.log("Calling askCoze...");
-        const cozeStartTime = performance.now();
-        try {
-          const convId = "cvinob75usogqsuoetgg"; // Replace with dynamic ID if needed
-          const answer = await askCoze(convId, questionText); // Await the async call
-          const cozeEndTime = performance.now();
-          const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
-
-          console.log("askCoze response:", answer);
-
-          if (answer !== null) {
-            // Success - update coze state
-            responses.value.coze.content = answer;
+        // --- Use the dynamic convId ---
+        const currentConversationId = convId.value;
+        if (!currentConversationId) {
+            console.error("Cannot call Coze: No active conversation ID. Please start a new conversation.");
+            // Update Coze state to show an error immediately
+            responses.value.coze.error = "请先点击'开启新对话'来获取会话ID";
             responses.value.coze.done = true;
-            responses.value.coze.responseTime = cozeDuration.toFixed(1);
-            responses.value.coze.error = null;
             responses.value.coze.lastUpdated = Date.now();
-            // You might want a simple confidence or leave as null
-            responses.value.coze.confidence = '中等可信度'; // Example
-          } else {
-            // Failure (askCoze returned null, maybe API logic flaw?)
-            console.error('askCoze returned null');
-            responses.value.coze.done = true;
-            responses.value.coze.responseTime = cozeDuration.toFixed(1);
-            responses.value.coze.error = '未能从 Coze 获取有效回答';
-            responses.value.coze.lastUpdated = Date.now();
-          }
-        } catch (error) {
-          // Failure (exception during fetch/askCoze)
-          const cozeEndTime = performance.now();
-          const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
-          console.error('Error calling askCoze:', error);
-          responses.value.coze.done = true; // Mark as done even on error
-          responses.value.coze.responseTime = cozeDuration.toFixed(1); // Record time taken until error
-          responses.value.coze.error = `请求 Coze 出错: ${error.message || '未知错误'}`;
-          responses.value.coze.lastUpdated = Date.now();
-        }
-        console.log("Updated Coze state:", JSON.stringify(responses.value.coze));
+            // Skip the rest of the Coze logic
+        } else {
+            console.log(`Calling askCoze with convId: ${currentConversationId}...`);
+            const cozeStartTime = performance.now();
+            try {
+              // Pass the dynamic ID to askCoze
+              const answer = await askCoze(currentConversationId, questionText);
+              const cozeEndTime = performance.now();
+              const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
+
+              console.log("askCoze response:", answer);
+
+              if (answer !== null && answer !== undefined) { // Check for null or undefined
+                responses.value.coze.content = answer;
+                responses.value.coze.done = true;
+                responses.value.coze.responseTime = cozeDuration.toFixed(1);
+                responses.value.coze.error = null;
+                responses.value.coze.lastUpdated = Date.now();
+                responses.value.coze.confidence = '中等可信度'; // Example
+              } else {
+                console.error('askCoze returned null or undefined');
+                responses.value.coze.done = true;
+                responses.value.coze.responseTime = cozeDuration.toFixed(1);
+                responses.value.coze.error = '未能从 Coze 获取有效回答';
+                responses.value.coze.lastUpdated = Date.now();
+              }
+            } catch (error) {
+              const cozeEndTime = performance.now();
+              const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
+              console.error('Error calling askCoze:', error);
+              responses.value.coze.done = true;
+              responses.value.coze.responseTime = cozeDuration.toFixed(1);
+              responses.value.coze.error = `请求 Coze 出错: ${error.message || '未知错误'}`;
+              responses.value.coze.lastUpdated = Date.now();
+            }
+            console.log("Updated Coze state:", JSON.stringify(responses.value.coze));
+        } // End of if(currentConversationId) block
       }
 
-      // 4. Interval Timer to check completion of ALL AIs and save history
+      // 4. Interval Timer to check completion
+      let checkCount = 0; // Prevent infinite loops
+      const maxChecks = 120; // e.g., 1 minute if interval is 500ms
+
       const checkCompletionInterval = setInterval(() => {
+        checkCount++;
         const allDone = aiList.every(ai => responses.value[ai.name]?.done);
-        // console.log("Checking completion, allDone:", allDone);
 
-        if (allDone) {
-          console.log("All AIs finished. Saving history.");
-          addHistoryItem(questionText, responses.value); // Save the final state
-          clearInterval(checkCompletionInterval); // Stop checking
-        } else {
-          // Optional: Update elapsed time for non-done WS responses if needed
-          // Note: Coze's time is set definitively above. WS time comes from wsResponses watcher.
-          // This section might only be needed if WS doesn't provide final time on 'done'.
-          const elapsed = Number((performance.now() - requestStartTime.value) / 1000);
-          wsAiNames.forEach(aiName => {
-            if (responses.value[aiName] && !responses.value[aiName].done) {
-              responses.value[aiName].responseTime = elapsed.toFixed(1); // Be careful not to overwrite final time from WS
+        if (allDone || checkCount > maxChecks) {
+            if (checkCount > maxChecks) {
+                console.warn("Completion check timed out. Saving history with current state.");
+                 // Mark any non-done WS responses as errored or timed out
+                 wsAiNames.forEach(aiName => {
+                     if(responses.value[aiName] && !responses.value[aiName].done) {
+                         responses.value[aiName].error = "响应超时";
+                         responses.value[aiName].done = true; // Mark as done to stop waiting
+                         responses.value[aiName].lastUpdated = Date.now();
+                     }
+                 });
+            } else {
+                console.log("All AIs finished. Saving history.");
             }
-          });
+            addHistoryItem(questionText, responses.value); // Save the final state
+            clearInterval(checkCompletionInterval); // Stop checking
+        } else {
+            // Update elapsed time for non-done WS responses
+            const elapsed = Number((performance.now() - requestStartTime.value) / 1000);
+            wsAiNames.forEach(aiName => {
+              if (responses.value[aiName] && !responses.value[aiName].done && responses.value[aiName].responseTime < elapsed) {
+                  // Only update if WS hasn't provided a final time yet
+                  responses.value[aiName].responseTime = elapsed.toFixed(1);
+              }
+            });
         }
-      }, 500); // Check every 500ms
-
+      }, 500);
     };
 
     // --- View Switching ---
     const handleViewChange = (view) => {
       console.log('Switching view to:', view);
       activeView.value = view;
-      if (view === 'chat') {
-        // Reset chat state for a new conversation
-        hasFirstQuestion.value = false;
+      // When switching to a non-chat view, or explicitly starting a *new* chat
+      // via the sidebar (which triggers this AND handleNewConversation),
+      // reset the chat state.
+      if (view !== 'chat') {
         showAnswers.value = false;
+        hasFirstQuestion.value = false;
         responses.value = {}; // Clear responses
-        // Clear other relevant states if any
+        // convId.value = null; // Decide if switching view should clear the ID
+                           // If 'Start New' always gets a fresh ID, maybe not needed here.
+                           // But if user switches to History then back to Chat, should they resume?
+                           // Current logic: 'Start New' gets a new ID, switching away doesn't clear it.
+      } else {
+          // If switching TO chat (e.g., from history click), we load history or start fresh.
+          // 'Start New Conversation' click handles its own reset/ID fetch.
+          // Loading history handles its state in `loadHistory`.
+          // If simply switching back to chat *without* clicking 'Start New',
+          // do we want to clear state? The current `handleNewConversationClick`
+          // in Sidebar already calls `changeView('chat')`, so this might be redundant
+          // or cause double resets. Let's keep chat state reset minimal here.
+          // The main reset for a *new* conversation happens via the 'Start New' flow.
+      }
+    };
+
+     // --- Handler for the new conversation event ---
+     const handleNewConversation = (newConversationId) => {
+      console.log('Parent received new conversation ID:', newConversationId);
+      convId.value = newConversationId; // Update the conversation ID state
+      // It's good practice to also reset the chat display when starting fresh
+      showAnswers.value = false;
+      hasFirstQuestion.value = false;
+      responses.value = {}; // Clear previous responses for the new chat
+      // activeView should already be 'chat' because handleNewConversationClick calls changeView('chat') first
+      // Ensure activeView is 'chat' if somehow it wasn't
+      if (activeView.value !== 'chat') {
+          activeView.value = 'chat';
       }
     };
 
     // --- Load History ---
     const loadHistory = (historyItem) => {
       console.log("Loading history item:", historyItem.id);
-      activeView.value = 'chat'; // Switch to chat view
-      // Ensure the structure matches what handleQuestion sets up
-      responses.value = historyItem.fullResponses || {}; // Load the saved state
-      showAnswers.value = true; // Show the answers panel
-      hasFirstQuestion.value = true; // Indicate that a question/answer is loaded
+      activeView.value = 'chat';
+      responses.value = historyItem.fullResponses || {};
+      showAnswers.value = true;
+      hasFirstQuestion.value = true; // We are showing a past question/answer
+      // Reset or set convId when loading history?
+      // If you saved convId with history and want to resume:
+      // convId.value = historyItem.convId || null;
+      // If loading history always means viewing static past data,
+      // and any new question starts a NEW conversation:
+      convId.value = null; // Clear current convId, user must click 'Start New' for Coze again.
+      console.warn("History loaded. Current conversation ID cleared. Click 'Start New Conversation' to interact with Coze again.");
+
     };
 
     // --- Initial Load ---
@@ -290,14 +324,18 @@ export default {
           console.log("Loaded history from localStorage:", history.value.length, "items");
         } catch (e) {
           console.error("Failed to parse chat history:", e);
-          localStorage.removeItem('chatHistory'); // Clear corrupted data
+          localStorage.removeItem('chatHistory');
         }
       }
+       // Optional: Automatically start a new conversation on initial load?
+       // If so, you'd need to trigger the same logic as handleNewConversationClick
+       // perhaps by calling a shared function or emitting from the child on mount.
+       // Example (would require AppSidebar changes to handle this):
+       // childSidebarRef.value?.startNewConversationOnInit();
+       // Or just call the API directly here if preferred:
+       // async function initConversation() { ... fetch ... handleNewConversation(id); }
+       // initConversation();
     });
-
-    // --- Other watchers (like GPT chain data) - Keep if needed ---
-    // watch(() => wsResponses.GPT?.content, ...);
-    // watch(() => wsResponses.GPT?.done, ...);
 
     return {
       sidebarCollapsed,
@@ -305,23 +343,23 @@ export default {
       history,
       toggleSidebar: () => sidebarCollapsed.value = !sidebarCollapsed.value,
       handleQuestion,
-      displayMode, // Keep if used by AnswersPanel/Sidebar
-      aiList, // Pass the full list to the template for UI rendering
-      // chainData, // Keep if needed
-      // currentStep, // Keep if needed
-      responses, // The local, combined state (used by processedResponses)
+      displayMode,
+      aiList,
+      responses,
       showAnswers,
       hasFirstQuestion,
       handleViewChange,
       loadHistory,
-      processedResponses, // Pass the computed property to AnswersPanel
-      // connectionStatus: wsConnectionStatus // If you made connectionStatus reactive in websocket.js
+      processedResponses,
+      convId, // <-- Return convId
+      handleNewConversation // <-- Return the handler
     };
   }
 };
 </script>
 
 <style>
+/* Styles remain the same */
 /* 新增历史记录面板样式 */
 .history-panel {
   background: white;
