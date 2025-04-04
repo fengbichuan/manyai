@@ -164,12 +164,27 @@ export default {
     };
 
     // 视图切换处理
+    // 视图切换处理
     const handleViewChange = (view) => {
+      console.log('切换视图到:', view); // 增加日志，方便调试
       activeView.value = view;
-      if (view === 'chat' && !hasFirstQuestion.value) {
-        showAnswers.value = false;
-      }
+
+      // 关键：当切换到 'chat' 视图时（即点击“开启新对话”）
+      // 需要重置聊天状态，让 ChatBox 显示初始界面
+      if (view === 'chat') {
+        hasFirstQuestion.value = false; // 设置为 false，ChatBox 会显示欢迎语
+        showAnswers.value = false;      // 隐藏回答面板
+        responses.value = {};         // 清空之前的回答数据
+        // 如果有其他与单次对话相关的状态，也在这里重置
+        // 例如：
+        // chainData.value = [];
+        // currentStep.value = -1;
+        // requestStartTime.value = null; 
+      } 
+      // 注意：不再需要之前的 `if (view === 'chat' && !hasFirstQuestion.value)` 条件，
+      // 因为上面的逻辑已经完整处理了切换到 chat 视图的情况。
     };
+
 
     // 加载历史记录功能
     const loadHistory = (historyItem) => {
