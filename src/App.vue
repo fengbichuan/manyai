@@ -1,12 +1,7 @@
 <template>
   <div id="app" class="app-container">
-    <AppSideBar
-      :collapsed="sidebarCollapsed"
-      :active-view="activeView"
-      @toggle="toggleSidebar"
-      @view-change="handleViewChange"
-      @new-conversation-created="handleNewConversation" 
-    />
+    <AppSideBar :collapsed="sidebarCollapsed" :active-view="activeView" @toggle="toggleSidebar"
+      @view-change="handleViewChange" @new-conversation-created="handleNewConversation" />
 
     <!-- 主内容区域 -->
     <main class="main-content" :style="{ marginLeft: sidebarCollapsed ? '80px' : '280px' }">
@@ -102,41 +97,41 @@ export default {
     watch(wsResponses, (newWsData) => {
       for (const [aiName, data] of Object.entries(newWsData)) {
         if (responses.value[aiName]) {
-            // Only update fields that exist in the incoming data
-            Object.keys(data).forEach(key => {
-                if (key in responses.value[aiName]) {
-                    responses.value[aiName][key] = data[key];
-                }
-            });
+          // Only update fields that exist in the incoming data
+          Object.keys(data).forEach(key => {
+            if (key in responses.value[aiName]) {
+              responses.value[aiName][key] = data[key];
+            }
+          });
         } else {
           console.warn(`Received WS data for unexpected or uninitialized AI: ${aiName}`);
-           // Initialize defensively if necessary, but handleQuestion should normally do this
-           responses.value[aiName] = reactive({
-               name: aiName,
-               content: data.content || '',
-               reasoning: data.reasoning || '',
-               done: data.done || false,
-               responseTime: data.responseTime || 0,
-               confidence: data.confidence || null,
-               error: data.error || null,
-               lastUpdated: data.lastUpdated || Date.now(), // Add timestamp
-           });
+          // Initialize defensively if necessary, but handleQuestion should normally do this
+          responses.value[aiName] = reactive({
+            name: aiName,
+            content: data.content || '',
+            reasoning: data.reasoning || '',
+            done: data.done || false,
+            responseTime: data.responseTime || 0,
+            confidence: data.confidence || null,
+            error: data.error || null,
+            lastUpdated: data.lastUpdated || Date.now(), // Add timestamp
+          });
         }
       }
     }, { deep: true });
 
-    // --- History Management ---
-    const addHistoryItem = (question, finalResponses) => {
-      // Consider if convId should also be saved in history if you want to resume later
+    // 历史记录处理方法
+
+    const addHistoryItem = (question, answers) => {
       const newItem = {
         id: Date.now(),
         timestamp: Date.now(),
         question,
-        // Save a deep copy of the final state
-        fullResponses: JSON.parse(JSON.stringify(finalResponses)),
-        // convId: convId.value // Optional: Save conversation ID with history
+        answers: { ...answers },
+        fullResponses: { ...responses.value },
+        convId: convId.value // 新增：保存当前会话ID
       };
-      console.log('Saving history item:', newItem);
+      console.log('Attempting to save history item:', newItem);
       history.value.unshift(newItem);
       if (history.value.length > 100) history.value.pop();
       localStorage.setItem('chatHistory', JSON.stringify(history.value));
@@ -175,47 +170,47 @@ export default {
         // --- Use the dynamic convId ---
         const currentConversationId = convId.value;
         if (!currentConversationId) {
-            console.error("Cannot call Coze: No active conversation ID. Please start a new conversation.");
-            // Update Coze state to show an error immediately
-            responses.value.coze.error = "请先点击'开启新对话'来获取会话ID";
-            responses.value.coze.done = true;
-            responses.value.coze.lastUpdated = Date.now();
-            // Skip the rest of the Coze logic
+          console.error("Cannot call Coze: No active conversation ID. Please start a new conversation.");
+          // Update Coze state to show an error immediately
+          responses.value.coze.error = "请先点击'开启新对话'来获取会话ID";
+          responses.value.coze.done = true;
+          responses.value.coze.lastUpdated = Date.now();
+          // Skip the rest of the Coze logic
         } else {
-            console.log(`Calling askCoze with convId: ${currentConversationId}...`);
-            const cozeStartTime = performance.now();
-            try {
-              // Pass the dynamic ID to askCoze
-              const answer = await askCoze(currentConversationId, questionText);
-              const cozeEndTime = performance.now();
-              const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
+          console.log(`Calling askCoze with convId: ${currentConversationId}...`);
+          const cozeStartTime = performance.now();
+          try {
+            // Pass the dynamic ID to askCoze
+            const answer = await askCoze(currentConversationId, questionText);
+            const cozeEndTime = performance.now();
+            const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
 
-              console.log("askCoze response:", answer);
+            console.log("askCoze response:", answer);
 
-              if (answer !== null && answer !== undefined) { // Check for null or undefined
-                responses.value.coze.content = answer;
-                responses.value.coze.done = true;
-                responses.value.coze.responseTime = cozeDuration.toFixed(1);
-                responses.value.coze.error = null;
-                responses.value.coze.lastUpdated = Date.now();
-                responses.value.coze.confidence = '中等可信度'; // Example
-              } else {
-                console.error('askCoze returned null or undefined');
-                responses.value.coze.done = true;
-                responses.value.coze.responseTime = cozeDuration.toFixed(1);
-                responses.value.coze.error = '未能从 Coze 获取有效回答';
-                responses.value.coze.lastUpdated = Date.now();
-              }
-            } catch (error) {
-              const cozeEndTime = performance.now();
-              const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
-              console.error('Error calling askCoze:', error);
+            if (answer !== null && answer !== undefined) { // Check for null or undefined
+              responses.value.coze.content = answer;
               responses.value.coze.done = true;
               responses.value.coze.responseTime = cozeDuration.toFixed(1);
-              responses.value.coze.error = `请求 Coze 出错: ${error.message || '未知错误'}`;
+              responses.value.coze.error = null;
+              responses.value.coze.lastUpdated = Date.now();
+              responses.value.coze.confidence = '中等可信度'; // Example
+            } else {
+              console.error('askCoze returned null or undefined');
+              responses.value.coze.done = true;
+              responses.value.coze.responseTime = cozeDuration.toFixed(1);
+              responses.value.coze.error = '未能从 Coze 获取有效回答';
               responses.value.coze.lastUpdated = Date.now();
             }
-            console.log("Updated Coze state:", JSON.stringify(responses.value.coze));
+          } catch (error) {
+            const cozeEndTime = performance.now();
+            const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
+            console.error('Error calling askCoze:', error);
+            responses.value.coze.done = true;
+            responses.value.coze.responseTime = cozeDuration.toFixed(1);
+            responses.value.coze.error = `请求 Coze 出错: ${error.message || '未知错误'}`;
+            responses.value.coze.lastUpdated = Date.now();
+          }
+          console.log("Updated Coze state:", JSON.stringify(responses.value.coze));
         } // End of if(currentConversationId) block
       }
 
@@ -228,30 +223,30 @@ export default {
         const allDone = aiList.every(ai => responses.value[ai.name]?.done);
 
         if (allDone || checkCount > maxChecks) {
-            if (checkCount > maxChecks) {
-                console.warn("Completion check timed out. Saving history with current state.");
-                 // Mark any non-done WS responses as errored or timed out
-                 wsAiNames.forEach(aiName => {
-                     if(responses.value[aiName] && !responses.value[aiName].done) {
-                         responses.value[aiName].error = "响应超时";
-                         responses.value[aiName].done = true; // Mark as done to stop waiting
-                         responses.value[aiName].lastUpdated = Date.now();
-                     }
-                 });
-            } else {
-                console.log("All AIs finished. Saving history.");
-            }
-            addHistoryItem(questionText, responses.value); // Save the final state
-            clearInterval(checkCompletionInterval); // Stop checking
-        } else {
-            // Update elapsed time for non-done WS responses
-            const elapsed = Number((performance.now() - requestStartTime.value) / 1000);
+          if (checkCount > maxChecks) {
+            console.warn("Completion check timed out. Saving history with current state.");
+            // Mark any non-done WS responses as errored or timed out
             wsAiNames.forEach(aiName => {
-              if (responses.value[aiName] && !responses.value[aiName].done && responses.value[aiName].responseTime < elapsed) {
-                  // Only update if WS hasn't provided a final time yet
-                  responses.value[aiName].responseTime = elapsed.toFixed(1);
+              if (responses.value[aiName] && !responses.value[aiName].done) {
+                responses.value[aiName].error = "响应超时";
+                responses.value[aiName].done = true; // Mark as done to stop waiting
+                responses.value[aiName].lastUpdated = Date.now();
               }
             });
+          } else {
+            console.log("All AIs finished. Saving history.");
+          }
+          addHistoryItem(questionText, responses.value); // Save the final state
+          clearInterval(checkCompletionInterval); // Stop checking
+        } else {
+          // Update elapsed time for non-done WS responses
+          const elapsed = Number((performance.now() - requestStartTime.value) / 1000);
+          wsAiNames.forEach(aiName => {
+            if (responses.value[aiName] && !responses.value[aiName].done && responses.value[aiName].responseTime < elapsed) {
+              // Only update if WS hasn't provided a final time yet
+              responses.value[aiName].responseTime = elapsed.toFixed(1);
+            }
+          });
         }
       }, 500);
     };
@@ -268,23 +263,23 @@ export default {
         hasFirstQuestion.value = false;
         responses.value = {}; // Clear responses
         // convId.value = null; // Decide if switching view should clear the ID
-                           // If 'Start New' always gets a fresh ID, maybe not needed here.
-                           // But if user switches to History then back to Chat, should they resume?
-                           // Current logic: 'Start New' gets a new ID, switching away doesn't clear it.
+        // If 'Start New' always gets a fresh ID, maybe not needed here.
+        // But if user switches to History then back to Chat, should they resume?
+        // Current logic: 'Start New' gets a new ID, switching away doesn't clear it.
       } else {
-          // If switching TO chat (e.g., from history click), we load history or start fresh.
-          // 'Start New Conversation' click handles its own reset/ID fetch.
-          // Loading history handles its state in `loadHistory`.
-          // If simply switching back to chat *without* clicking 'Start New',
-          // do we want to clear state? The current `handleNewConversationClick`
-          // in Sidebar already calls `changeView('chat')`, so this might be redundant
-          // or cause double resets. Let's keep chat state reset minimal here.
-          // The main reset for a *new* conversation happens via the 'Start New' flow.
+        // If switching TO chat (e.g., from history click), we load history or start fresh.
+        // 'Start New Conversation' click handles its own reset/ID fetch.
+        // Loading history handles its state in `loadHistory`.
+        // If simply switching back to chat *without* clicking 'Start New',
+        // do we want to clear state? The current `handleNewConversationClick`
+        // in Sidebar already calls `changeView('chat')`, so this might be redundant
+        // or cause double resets. Let's keep chat state reset minimal here.
+        // The main reset for a *new* conversation happens via the 'Start New' flow.
       }
     };
 
-     // --- Handler for the new conversation event ---
-     const handleNewConversation = (newConversationId) => {
+    // --- Handler for the new conversation event ---
+    const handleNewConversation = (newConversationId) => {
       console.log('Parent received new conversation ID:', newConversationId);
       convId.value = newConversationId; // Update the conversation ID state
       // It's good practice to also reset the chat display when starting fresh
@@ -294,26 +289,20 @@ export default {
       // activeView should already be 'chat' because handleNewConversationClick calls changeView('chat') first
       // Ensure activeView is 'chat' if somehow it wasn't
       if (activeView.value !== 'chat') {
-          activeView.value = 'chat';
+        activeView.value = 'chat';
       }
     };
 
     // --- Load History ---
     const loadHistory = (historyItem) => {
-      console.log("Loading history item:", historyItem.id);
+      console.log("加载历史记录，恢复会话ID:", historyItem.convId);
       activeView.value = 'chat';
       responses.value = historyItem.fullResponses || {};
+      convId.value = historyItem.convId || null; // 新增：恢复历史会话ID
       showAnswers.value = true;
-      hasFirstQuestion.value = true; // We are showing a past question/answer
-      // Reset or set convId when loading history?
-      // If you saved convId with history and want to resume:
-      // convId.value = historyItem.convId || null;
-      // If loading history always means viewing static past data,
-      // and any new question starts a NEW conversation:
-      convId.value = null; // Clear current convId, user must click 'Start New' for Coze again.
-      console.warn("History loaded. Current conversation ID cleared. Click 'Start New Conversation' to interact with Coze again.");
-
+      hasFirstQuestion.value = true;
     };
+
 
     // --- Initial Load ---
     onMounted(() => {
@@ -327,14 +316,14 @@ export default {
           localStorage.removeItem('chatHistory');
         }
       }
-       // Optional: Automatically start a new conversation on initial load?
-       // If so, you'd need to trigger the same logic as handleNewConversationClick
-       // perhaps by calling a shared function or emitting from the child on mount.
-       // Example (would require AppSidebar changes to handle this):
-       // childSidebarRef.value?.startNewConversationOnInit();
-       // Or just call the API directly here if preferred:
-       // async function initConversation() { ... fetch ... handleNewConversation(id); }
-       // initConversation();
+      // Optional: Automatically start a new conversation on initial load?
+      // If so, you'd need to trigger the same logic as handleNewConversationClick
+      // perhaps by calling a shared function or emitting from the child on mount.
+      // Example (would require AppSidebar changes to handle this):
+      // childSidebarRef.value?.startNewConversationOnInit();
+      // Or just call the API directly here if preferred:
+      // async function initConversation() { ... fetch ... handleNewConversation(id); }
+      // initConversation();
     });
 
     return {
