@@ -74,6 +74,8 @@ export default {
     // const wsAiNames = aiList.filter(ai => ai.name !== 'coze').map(ai => ai.name);
     const wsAiNames = aiList.map(ai => ai.name);
     const { responses: wsResponses, sendQuestion } = useAIWebSocket('ws://localhost:8082/chat', wsAiNames);
+    //打印responses的内容
+    console.log(wsResponses);
 
     // --- Computed Property for Display ---
     const processedResponses = computed(() => {
