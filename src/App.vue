@@ -71,7 +71,8 @@ export default {
     ];
 
     // --- WebSocket Setup ---
-    const wsAiNames = aiList.filter(ai => ai.name !== 'coze').map(ai => ai.name);
+    // const wsAiNames = aiList.filter(ai => ai.name !== 'coze').map(ai => ai.name);
+    const wsAiNames = aiList.map(ai => ai.name);
     const { responses: wsResponses, sendQuestion } = useAIWebSocket('ws://localhost:8082/chat', wsAiNames);
 
     // --- Computed Property for Display ---
@@ -161,7 +162,7 @@ export default {
       // 2. Trigger WebSocket AIs
       if (wsAiNames.length > 0) {
         console.log("Sending question to WebSocket AIs:", wsAiNames);
-        sendQuestion(questionText);
+        sendQuestion(questionText, convId.value);
       }
 
       // 3. Trigger Coze API call (using dynamic convId)
@@ -177,40 +178,41 @@ export default {
           responses.value.coze.lastUpdated = Date.now();
           // Skip the rest of the Coze logic
         } else {
-          console.log(`Calling askCoze with convId: ${currentConversationId}...`);
-          const cozeStartTime = performance.now();
-          try {
-            // Pass the dynamic ID to askCoze
-            const answer = await askCoze(currentConversationId, questionText);
-            const cozeEndTime = performance.now();
-            const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
+          console.log(askCoze);
+          // console.log(`Calling askCoze with convId: ${currentConversationId}...`);
+          // const cozeStartTime = performance.now();
+          // try {
+          //   // Pass the dynamic ID to askCoze
+          //   const answer = await askCoze(currentConversationId, questionText);
+          //   const cozeEndTime = performance.now();
+          //   const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
 
-            console.log("askCoze response:", answer);
+          //   console.log("askCoze response:", answer);
 
-            if (answer !== null && answer !== undefined) { // Check for null or undefined
-              responses.value.coze.content = answer;
-              responses.value.coze.done = true;
-              responses.value.coze.responseTime = cozeDuration.toFixed(1);
-              responses.value.coze.error = null;
-              responses.value.coze.lastUpdated = Date.now();
-              responses.value.coze.confidence = '中等可信度'; // Example
-            } else {
-              console.error('askCoze returned null or undefined');
-              responses.value.coze.done = true;
-              responses.value.coze.responseTime = cozeDuration.toFixed(1);
-              responses.value.coze.error = '未能从 Coze 获取有效回答';
-              responses.value.coze.lastUpdated = Date.now();
-            }
-          } catch (error) {
-            const cozeEndTime = performance.now();
-            const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
-            console.error('Error calling askCoze:', error);
-            responses.value.coze.done = true;
-            responses.value.coze.responseTime = cozeDuration.toFixed(1);
-            responses.value.coze.error = `请求 Coze 出错: ${error.message || '未知错误'}`;
-            responses.value.coze.lastUpdated = Date.now();
-          }
-          console.log("Updated Coze state:", JSON.stringify(responses.value.coze));
+          //   if (answer !== null && answer !== undefined) { // Check for null or undefined
+          //     responses.value.coze.content = answer;
+          //     responses.value.coze.done = true;
+          //     responses.value.coze.responseTime = cozeDuration.toFixed(1);
+          //     responses.value.coze.error = null;
+          //     responses.value.coze.lastUpdated = Date.now();
+          //     responses.value.coze.confidence = '中等可信度'; // Example
+          //   } else {
+          //     console.error('askCoze returned null or undefined');
+          //     responses.value.coze.done = true;
+          //     responses.value.coze.responseTime = cozeDuration.toFixed(1);
+          //     responses.value.coze.error = '未能从 Coze 获取有效回答';
+          //     responses.value.coze.lastUpdated = Date.now();
+          //   }
+          // } catch (error) {
+          //   const cozeEndTime = performance.now();
+          //   const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
+          //   console.error('Error calling askCoze:', error);
+          //   responses.value.coze.done = true;
+          //   responses.value.coze.responseTime = cozeDuration.toFixed(1);
+          //   responses.value.coze.error = `请求 Coze 出错: ${error.message || '未知错误'}`;
+          //   responses.value.coze.lastUpdated = Date.now();
+          // }
+          // console.log("Updated Coze state:", JSON.stringify(responses.value.coze));
         } // End of if(currentConversationId) block
       }
 

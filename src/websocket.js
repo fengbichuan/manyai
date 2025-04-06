@@ -254,7 +254,7 @@ export function useAIWebSocket(url, aiList) {
   })
 
   // ================= 公共方法 =================
-  const sendQuestion = (question) => {
+  const sendQuestion = (question, conversationId) => {
     if (!isConnected) {
       console.error('发送失败：连接未建立')
       return false
@@ -275,6 +275,7 @@ export function useAIWebSocket(url, aiList) {
     const payload = {
       question,
       ais: aiList,
+      cozeConversationID: conversationId,
       timestamp: Date.now()
     }
 
