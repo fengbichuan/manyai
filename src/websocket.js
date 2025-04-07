@@ -55,7 +55,7 @@ export function useAIWebSocket(url, aiList) {
       })
 
       updateAIState(aiName, data)
-      forceViewUpdate(aiName)
+      //forceViewUpdate(aiName)
 
     } catch (error) {
       console.error('消息处理失败:', error)
@@ -116,18 +116,28 @@ export function useAIWebSocket(url, aiList) {
   }
 
   const processContentUpdates = (aiState, data) => {
-    // 增量更新内容
-    if (typeof data.content === 'string') {
-      aiState.content += data.content
-      aiState.lastUpdated = Date.now()
+    const isCoze = aiState.name === 'coze'; // 检查是否是Coze
+
+    // 仅为Coze添加更详细的日志
+    if (isCoze && typeof data.content === 'string' && data.content) {
+        console.log(`[WS][COZE DEBUG] Received chunk: "${data.content}" | Current content length: ${aiState.content.length}`);
     }
 
-    // 增量更新推理过程
-    if (typeof data.reasoning === 'string') {
-      aiState.reasoning += data.reasoning
-      aiState.lastUpdated = Date.now()
+    // 原有的追加逻辑
+    if (typeof data.content === 'string') {
+        aiState.content += data.content;
+        aiState.lastUpdated = Date.now();
     }
-  }
+    if (typeof data.reasoning === 'string') {
+        aiState.reasoning += data.reasoning;
+        aiState.lastUpdated = Date.now();
+    }
+
+    // 仅为Coze添加追加后的日志
+    if (isCoze && typeof data.content === 'string' && data.content) {
+         console.log(`[WS][COZE DEBUG] Content after append length: ${aiState.content.length}`);
+    }
+};
 
   const processCompletion = (aiState, data) => {
     aiState.done = true
@@ -312,47 +322,6 @@ export function useAIWebSocket(url, aiList) {
     responses,
     sendQuestion,
     connectionStatus: isConnected
-  }
-}
-
-
-
-
-export async function askCoze(conversationId, question) {
-  const url = "http://localhost:8082/api/coze/ask";
-  const payload = {
-    conversationId: conversationId,
-    question: question
-  };
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload) // 需要手动将 JS 对象转为 JSON 字符串
-    });
-
-    if (!response.ok) { // 检查 HTTP 状态码是否表示成功
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const responseData = await response.json(); // 解析 JSON 响应体
-
-    if (responseData && responseData.answer !== undefined) {
-        console.log("成功获取到回答:");
-        console.log(responseData.answer);
-        return responseData.answer;
-    } else {
-        console.log("响应中未找到 'answer' 字段。");
-        console.log("完整响应:", responseData);
-        return null;
-    }
-
-  } catch (error) {
-    console.error("请求出错:", error);
-    return null;
   }
 }
 

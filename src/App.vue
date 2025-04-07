@@ -35,7 +35,7 @@
 <script>
 // Keep imports as they are
 import { ref, watch, onMounted, computed, reactive } from 'vue';
-import { useAIWebSocket, askCoze } from './websocket.js'; // Ensure askCoze is correctly imported
+import { useAIWebSocket } from './websocket.js'; 
 import AnswersPanel from './components/AnswersPanel.vue';
 import AssistTouch from './components/AssistTouch.vue';
 import AppSideBar from './components/AppSidebar.vue';
@@ -179,43 +179,7 @@ export default {
           responses.value.coze.done = true;
           responses.value.coze.lastUpdated = Date.now();
           // Skip the rest of the Coze logic
-        } else {
-          console.log(askCoze);
-          // console.log(`Calling askCoze with convId: ${currentConversationId}...`);
-          // const cozeStartTime = performance.now();
-          // try {
-          //   // Pass the dynamic ID to askCoze
-          //   const answer = await askCoze(currentConversationId, questionText);
-          //   const cozeEndTime = performance.now();
-          //   const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
-
-          //   console.log("askCoze response:", answer);
-
-          //   if (answer !== null && answer !== undefined) { // Check for null or undefined
-          //     responses.value.coze.content = answer;
-          //     responses.value.coze.done = true;
-          //     responses.value.coze.responseTime = cozeDuration.toFixed(1);
-          //     responses.value.coze.error = null;
-          //     responses.value.coze.lastUpdated = Date.now();
-          //     responses.value.coze.confidence = '中等可信度'; // Example
-          //   } else {
-          //     console.error('askCoze returned null or undefined');
-          //     responses.value.coze.done = true;
-          //     responses.value.coze.responseTime = cozeDuration.toFixed(1);
-          //     responses.value.coze.error = '未能从 Coze 获取有效回答';
-          //     responses.value.coze.lastUpdated = Date.now();
-          //   }
-          // } catch (error) {
-          //   const cozeEndTime = performance.now();
-          //   const cozeDuration = ((cozeEndTime - cozeStartTime) / 1000);
-          //   console.error('Error calling askCoze:', error);
-          //   responses.value.coze.done = true;
-          //   responses.value.coze.responseTime = cozeDuration.toFixed(1);
-          //   responses.value.coze.error = `请求 Coze 出错: ${error.message || '未知错误'}`;
-          //   responses.value.coze.lastUpdated = Date.now();
-          // }
-          // console.log("Updated Coze state:", JSON.stringify(responses.value.coze));
-        } // End of if(currentConversationId) block
+        } 
       }
 
       // 4. Interval Timer to check completion
