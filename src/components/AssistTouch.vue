@@ -39,8 +39,8 @@ export default {
     ]);
 
     const menuPosition = computed(() => ({
-      left: posX.value > window.innerWidth / 2 ? '-180px' : '40px',
-      top: posY.value > window.innerHeight / 2 ? '-160px' : '40px'
+      // left: posX.value > window.innerWidth / 2 ? '-180px' : '40px',
+      // top: posY.value > window.innerHeight / 2 ? '-160px' : '40px'
     }));
 
     const startDrag = (e) => {
@@ -86,12 +86,12 @@ export default {
       const angle = (index * 360) / count;
       return {
         transform: `
-      translate(-15%, -100%) 
+      translate(0, -50%)
       rotate(${angle}deg) 
       translate(100px) 
       rotate(-${angle}deg)
     `,
-        transformOrigin: 'center center'
+        transformOrigin: '0 0'
       };
     };
     onMounted(() => {
@@ -144,9 +144,10 @@ export default {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%); /* 强制居中于父容器 */
   width: 0;
   height: 0;
+  pointer-events: auto; 
 }
 
 .menu-spark {
