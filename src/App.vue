@@ -1,8 +1,7 @@
 <template>
-
   <div id="app" class="app-container">
     <AppSideBar :collapsed="sidebarCollapsed" :active-view="activeView" @toggle="toggleSidebar"
-      @view-change="handleViewChange" />
+      @view-change="handleViewChange" @new-conversation-created="handleNewConversation" />
 
     <!-- 主内容区域 -->
     <main class="main-content" :style="{ marginLeft: sidebarCollapsed ? '80px' : '280px' }">
@@ -16,9 +15,10 @@
         <!-- 聊天回答视图 -->
         <transition name="answers-fade">
           <section v-if="showAnswers && activeView === 'chat'" class="response-section" key="response-section">
+            <!-- Optional: Display convId for debugging -->
+            <!-- <p>Debug: Current ConvID = {{ convId || 'None' }}</p> -->
             <AnswersPanel :mode="displayMode" :ai-list="aiList" :responses="processedResponses" />
           </section>
-          
         </transition>
       </div>
     </main>
@@ -33,8 +33,9 @@
 </template>
 
 <script>
+// Keep imports as they are
 import { ref, watch, onMounted, computed, reactive } from 'vue';
-import { useAIWebSocket } from './websocket.js';
+import { useAIWebSocket } from './websocket.js'; 
 import AnswersPanel from './components/AnswersPanel.vue';
 import AssistTouch from './components/AssistTouch.vue';
 import AppSideBar from './components/AppSidebar.vue';
@@ -51,177 +52,246 @@ export default {
     History
   },
   setup() {
-    // 状态管理
+    // --- State Management ---
     const sidebarCollapsed = ref(false);
     const activeView = ref('chat');
     const history = ref([]);
     const showAnswers = ref(false);
     const hasFirstQuestion = ref(false);
     const displayMode = ref('parallel');
-    const chainData = ref([]);
-    const currentStep = ref(-1);
     const responses = ref({});
     const requestStartTime = ref(null);
+    const convId = ref(null); // <-- Add state for Conversation ID
 
     const aiList = [
       { name: 'GPT', logo: require('@/assets/chatgpt.png') },
       { name: 'DeepSeek', logo: require('@/assets/deepseek.png') },
-      { name: 'Kimi', logo: require('@/assets/kimi.png') }
+      { name: 'Kimi', logo: require('@/assets/kimi.png') },
+      { name: 'coze', logo: require('@/assets/coze.png') },
     ];
-    const aiNames = aiList.map(ai => ai.name);
-    const { responses: wsResponses, sendQuestion } = useAIWebSocket('ws://localhost:8082/chat', aiNames);
 
-    // 计算属性处理响应格式
-    /*
-     {"GPT":{"name":"GPT","content":"","reasoning":"","done":true,"responseTime":"7.5","confidence":"低可信度","error":null,"lastUpdated":1742836458818},
-     "DeepSeek":{"name":"DeepSeek","content":"","reasoning":"","done":true,"responseTime":"5.4","confidence":"低可信度","error":null,"lastUpdated":1742836456685},
-     "Kimi":{"name":"Kimi","content":"","reasoning":"","done":true,"responseTime":"9.9","confidence":"低可信度","error":null,"lastUpdated":1742836461197}} 
-     */
+    // --- WebSocket Setup ---
+    // const wsAiNames = aiList.filter(ai => ai.name !== 'coze').map(ai => ai.name);
+    const wsAiNames = aiList.map(ai => ai.name);
+    const { responses: wsResponses, sendQuestion } = useAIWebSocket('ws://localhost:8082/chat', wsAiNames);
+    //打印responses的内容
+    console.log(wsResponses);
+
+    // --- Computed Property for Display ---
     const processedResponses = computed(() => {
-      // console.log('wsResponses', JSON.stringify(wsResponses));
-      // console.log('responses', JSON.stringify(responses.value));
-      return Object.entries(responses.value || {}).reduce((acc, [aiName, response]) => {
-        acc[aiName] = {
-          ...response,
-          content: response.content || '',
-          reasoning: response.reasoning || '',
-          confidence: response.confidence || '低可信度',
-          error: response.error || null,
-          lastUpdated: response.lastUpdated || Date.now(),
-          done: response.done || false,
-          time: response.responseTime || '0.0'
+      const processed = {};
+      aiList.forEach(ai => {
+        const responseData = responses.value[ai.name];
+        processed[ai.name] = {
+          name: ai.name,
+          content: responseData?.content || '',
+          reasoning: responseData?.reasoning || '',
+          done: responseData?.done || false,
+          responseTime: responseData?.responseTime?.toString() || '0.0',
+          confidence: responseData?.confidence || null,
+          error: responseData?.error || null,
+          lastUpdated: responseData?.lastUpdated || 0,
         };
-        return acc;
-      }, {});
+      });
+      return processed;
     });
 
-    // 监听 WebSocket 响应，更新响应状态
-    // eslint-disable-next-line
-    watch(wsResponses, (newResponses) => {
-    })
+    // --- Watch WebSocket Responses ---
+    watch(wsResponses, (newWsData) => {
+      for (const [aiName, data] of Object.entries(newWsData)) {
+        if (responses.value[aiName]) {
+          // Only update fields that exist in the incoming data
+          Object.keys(data).forEach(key => {
+            if (key in responses.value[aiName]) {
+              responses.value[aiName][key] = data[key];
+            }
+          });
+        } else {
+          console.warn(`Received WS data for unexpected or uninitialized AI: ${aiName}`);
+          // Initialize defensively if necessary, but handleQuestion should normally do this
+          responses.value[aiName] = reactive({
+            name: aiName,
+            content: data.content || '',
+            reasoning: data.reasoning || '',
+            done: data.done || false,
+            responseTime: data.responseTime || 0,
+            confidence: data.confidence || null,
+            error: data.error || null,
+            lastUpdated: data.lastUpdated || Date.now(), // Add timestamp
+          });
+        }
+      }
+    }, { deep: true });
 
     // 历史记录处理方法
+
     const addHistoryItem = (question, answers) => {
       const newItem = {
         id: Date.now(),
         timestamp: Date.now(),
         question,
         answers: { ...answers },
-        fullResponses: { ...responses.value }
+        fullResponses: { ...responses.value },
+        convId: convId.value // 新增：保存当前会话ID
       };
-
+      console.log('Attempting to save history item:', newItem);
       history.value.unshift(newItem);
       if (history.value.length > 100) history.value.pop();
       localStorage.setItem('chatHistory', JSON.stringify(history.value));
     };
 
-    // 提问处理方法
+    // --- Question Handling (Main Logic) ---
     const handleQuestion = async (questionText) => {
       if (questionText.trim() === '') return;
 
+      console.log(`Handling question: "${questionText}"`);
       showAnswers.value = true;
       hasFirstQuestion.value = true;
-      responses.value = {};
-      activeView.value = 'chat';
+      // activeView should already be 'chat' if ChatBox is visible, but double-check isn't harmful
+      if (activeView.value !== 'chat') activeView.value = 'chat';
       requestStartTime.value = performance.now();
 
-      try {
-        await sendQuestion(questionText);
+      // 1. Initialize/Reset state for ALL AIs
+      responses.value = aiList.reduce((acc, ai) => {
+        acc[ai.name] = reactive({
+          name: ai.name, content: '', reasoning: '', done: false,
+          responseTime: 0, confidence: null, error: null, lastUpdated: 0,
+        });
+        return acc;
+      }, {});
+      console.log("Initial responses state:", JSON.stringify(responses.value));
 
-        const checkCompletion = () => {
-          const allDone = Object.values(responses.value).every(r => r?.done);
-          if (allDone) {
-            addHistoryItem(questionText, responses.value);
-          }
-        };
+      // 2. Trigger WebSocket AIs
+      if (wsAiNames.length > 0) {
+        console.log("Sending question to WebSocket AIs:", wsAiNames);
+        sendQuestion(questionText, convId.value);
+      }
 
-        const completionCheckInterval = setInterval(checkCompletion, 500);
+      // 3. Trigger Coze API call (using dynamic convId)
+      const cozeAiInfo = aiList.find(ai => ai.name === 'coze');
+      if (cozeAiInfo) {
+        // --- Use the dynamic convId ---
+        const currentConversationId = convId.value;
+        if (!currentConversationId) {
+          console.error("Cannot call Coze: No active conversation ID. Please start a new conversation.");
+          // Update Coze state to show an error immediately
+          responses.value.coze.error = "请先点击'开启新对话'来获取会话ID";
+          responses.value.coze.done = true;
+          responses.value.coze.lastUpdated = Date.now();
+          // Skip the rest of the Coze logic
+        } 
+      }
 
-        const timer = setInterval(() => {
-          if (!Object.values(responses.value).every(r => r?.done)) {
-            const elapsed = Number((performance.now() - requestStartTime.value) / 1000);
-            Object.keys(responses.value).forEach(ai => {
-              if (!responses.value[ai]?.done) {
-                responses.value[ai].responseTime = elapsed.toFixed(1);
+      // 4. Interval Timer to check completion
+      let checkCount = 0; // Prevent infinite loops
+      const maxChecks = 120; // e.g., 1 minute if interval is 500ms
+
+      const checkCompletionInterval = setInterval(() => {
+        checkCount++;
+        const allDone = aiList.every(ai => responses.value[ai.name]?.done);
+
+        if (allDone || checkCount > maxChecks) {
+          if (checkCount > maxChecks) {
+            console.warn("Completion check timed out. Saving history with current state.");
+            // Mark any non-done WS responses as errored or timed out
+            wsAiNames.forEach(aiName => {
+              if (responses.value[aiName] && !responses.value[aiName].done) {
+                responses.value[aiName].error = "响应超时";
+                responses.value[aiName].done = true; // Mark as done to stop waiting
+                responses.value[aiName].lastUpdated = Date.now();
               }
             });
           } else {
-            clearInterval(timer);
-            clearInterval(completionCheckInterval);
+            console.log("All AIs finished. Saving history.");
           }
-        }, 100);
-
-      } catch (error) {
-        console.error('Error:', error);
-        responses.value = {
-          Error: {
-            content: '连接失败，请检查网络',
-            done: true,
-            responseTime: 0,
-            confidence: '未知'
-          }
-        };
-      }
+          addHistoryItem(questionText, responses.value); // Save the final state
+          clearInterval(checkCompletionInterval); // Stop checking
+        } else {
+          // Update elapsed time for non-done WS responses
+          const elapsed = Number((performance.now() - requestStartTime.value) / 1000);
+          wsAiNames.forEach(aiName => {
+            if (responses.value[aiName] && !responses.value[aiName].done && responses.value[aiName].responseTime < elapsed) {
+              // Only update if WS hasn't provided a final time yet
+              responses.value[aiName].responseTime = elapsed.toFixed(1);
+            }
+          });
+        }
+      }, 500);
     };
 
-    // 视图切换处理
+    // --- View Switching ---
     const handleViewChange = (view) => {
+      console.log('Switching view to:', view);
       activeView.value = view;
-      if (view === 'chat' && !hasFirstQuestion.value) {
+      // When switching to a non-chat view, or explicitly starting a *new* chat
+      // via the sidebar (which triggers this AND handleNewConversation),
+      // reset the chat state.
+      if (view !== 'chat') {
         showAnswers.value = false;
+        hasFirstQuestion.value = false;
+        responses.value = {}; // Clear responses
+        // convId.value = null; // Decide if switching view should clear the ID
+        // If 'Start New' always gets a fresh ID, maybe not needed here.
+        // But if user switches to History then back to Chat, should they resume?
+        // Current logic: 'Start New' gets a new ID, switching away doesn't clear it.
+      } else {
+        // If switching TO chat (e.g., from history click), we load history or start fresh.
+        // 'Start New Conversation' click handles its own reset/ID fetch.
+        // Loading history handles its state in `loadHistory`.
+        // If simply switching back to chat *without* clicking 'Start New',
+        // do we want to clear state? The current `handleNewConversationClick`
+        // in Sidebar already calls `changeView('chat')`, so this might be redundant
+        // or cause double resets. Let's keep chat state reset minimal here.
+        // The main reset for a *new* conversation happens via the 'Start New' flow.
       }
     };
 
-    // 加载历史记录功能
+    // --- Handler for the new conversation event ---
+    const handleNewConversation = (newConversationId) => {
+      console.log('Parent received new conversation ID:', newConversationId);
+      convId.value = newConversationId; // Update the conversation ID state
+      // It's good practice to also reset the chat display when starting fresh
+      showAnswers.value = false;
+      hasFirstQuestion.value = false;
+      responses.value = {}; // Clear previous responses for the new chat
+      // activeView should already be 'chat' because handleNewConversationClick calls changeView('chat') first
+      // Ensure activeView is 'chat' if somehow it wasn't
+      if (activeView.value !== 'chat') {
+        activeView.value = 'chat';
+      }
+    };
+
+    // --- Load History ---
     const loadHistory = (historyItem) => {
+      console.log("加载历史记录，恢复会话ID:", historyItem.convId);
       activeView.value = 'chat';
+      responses.value = historyItem.fullResponses || {};
+      convId.value = historyItem.convId || null; // 新增：恢复历史会话ID
       showAnswers.value = true;
-      responses.value = historyItem.fullResponses;
       hasFirstQuestion.value = true;
     };
 
-    // 初始化加载历史记录
+
+    // --- Initial Load ---
     onMounted(() => {
       const savedHistory = localStorage.getItem('chatHistory');
       if (savedHistory) {
-        history.value = JSON.parse(savedHistory);
-      }
-    });
-
-    // WebSocket响应处理
-    watch(wsResponses, (newResponses) => {
-      console.log("watch", JSON.stringify(newResponses));
-      for (const [ai, data] of Object.entries(newResponses)) {
-        if (!responses.value[ai]) {
-          responses.value[ai] = reactive({
-            content: '',
-            reasoning: '',
-            done: false,
-            time: 0 // 统一使用time字段
-          });
-        }
-
-        // 增量更新逻辑保持不变
-        if (data.content) responses.value[ai].content = data.content;
-        if (data.reasoning) responses.value[ai].reasoning = data.reasoning;
-        if (data.done) responses.value[ai].done = true;
-        if (data.time) responses.value[ai].time = data.time; // 同步time字段
-      }
-    }, { deep: true }); // 添加深度监听
-
-    watch(() => wsResponses.GPT?.content, (newContent, oldContent) => {
-      if (newContent && newContent.length > (oldContent?.length || 0)) {
-        if (newContent.endsWith('。\n') || newContent.endsWith('.\n')) {
-          if (!chainData.value.some(step => step.info === newContent)) {
-            chainData.value.push({ step: chainData.value.length + 1, info: newContent });
-            currentStep.value = chainData.value.length - 1;
-          }
+        try {
+          history.value = JSON.parse(savedHistory);
+          console.log("Loaded history from localStorage:", history.value.length, "items");
+        } catch (e) {
+          console.error("Failed to parse chat history:", e);
+          localStorage.removeItem('chatHistory');
         }
       }
-    });
-
-    watch(() => wsResponses.GPT?.done, (done) => {
-      if (done) currentStep.value = -1;
+      // Optional: Automatically start a new conversation on initial load?
+      // If so, you'd need to trigger the same logic as handleNewConversationClick
+      // perhaps by calling a shared function or emitting from the child on mount.
+      // Example (would require AppSidebar changes to handle this):
+      // childSidebarRef.value?.startNewConversationOnInit();
+      // Or just call the API directly here if preferred:
+      // async function initConversation() { ... fetch ... handleNewConversation(id); }
+      // initConversation();
     });
 
     return {
@@ -232,20 +302,21 @@ export default {
       handleQuestion,
       displayMode,
       aiList,
-      chainData,
-      currentStep,
       responses,
       showAnswers,
       hasFirstQuestion,
       handleViewChange,
       loadHistory,
-      processedResponses // 确保返回processedResponses
+      processedResponses,
+      convId, // <-- Return convId
+      handleNewConversation // <-- Return the handler
     };
   }
 };
 </script>
 
 <style>
+/* Styles remain the same */
 /* 新增历史记录面板样式 */
 .history-panel {
   background: white;

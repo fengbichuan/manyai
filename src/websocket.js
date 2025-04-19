@@ -55,7 +55,7 @@ export function useAIWebSocket(url, aiList) {
       })
 
       updateAIState(aiName, data)
-      forceViewUpdate(aiName)
+      //forceViewUpdate(aiName)
 
     } catch (error) {
       console.error('消息处理失败:', error)
@@ -116,18 +116,28 @@ export function useAIWebSocket(url, aiList) {
   }
 
   const processContentUpdates = (aiState, data) => {
-    // 增量更新内容
-    if (typeof data.content === 'string') {
-      aiState.content += data.content
-      aiState.lastUpdated = Date.now()
+    const isCoze = aiState.name === 'coze'; // 检查是否是Coze
+
+    // 仅为Coze添加更详细的日志
+    if (isCoze && typeof data.content === 'string' && data.content) {
+        console.log(`[WS][COZE DEBUG] Received chunk: "${data.content}" | Current content length: ${aiState.content.length}`);
     }
 
-    // 增量更新推理过程
-    if (typeof data.reasoning === 'string') {
-      aiState.reasoning += data.reasoning
-      aiState.lastUpdated = Date.now()
+    // 原有的追加逻辑
+    if (typeof data.content === 'string') {
+        aiState.content += data.content;
+        aiState.lastUpdated = Date.now();
     }
-  }
+    if (typeof data.reasoning === 'string') {
+        aiState.reasoning += data.reasoning;
+        aiState.lastUpdated = Date.now();
+    }
+
+    // 仅为Coze添加追加后的日志
+    if (isCoze && typeof data.content === 'string' && data.content) {
+         console.log(`[WS][COZE DEBUG] Content after append length: ${aiState.content.length}`);
+    }
+};
 
   const processCompletion = (aiState, data) => {
     aiState.done = true
@@ -254,7 +264,7 @@ export function useAIWebSocket(url, aiList) {
   })
 
   // ================= 公共方法 =================
-  const sendQuestion = (question) => {
+  const sendQuestion = (question, conversationId) => {
     if (!isConnected) {
       console.error('发送失败：连接未建立')
       return false
@@ -275,6 +285,7 @@ export function useAIWebSocket(url, aiList) {
     const payload = {
       question,
       ais: aiList,
+      cozeConversationID: conversationId,
       timestamp: Date.now()
     }
 
@@ -313,3 +324,4 @@ export function useAIWebSocket(url, aiList) {
     connectionStatus: isConnected
   }
 }
+

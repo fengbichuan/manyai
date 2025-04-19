@@ -11,7 +11,7 @@
         :content="responses[ai.name]?.content || ''"
         :reasoning-steps="getChainData(ai.name)"
         :done="responses[ai.name]?.done || false"
-        :response-time="responses[ai.name]?.time / 1000*1000|| 0"
+        :response-time="getResponseTimeValue(ai.name)" 
       />
     </div>
   </div>
@@ -29,6 +29,20 @@ const props = defineProps({
     default: 'parallel'
   }
 });
+
+const getResponseTimeValue = (aiName) => {
+  const timeValue = props.responses[aiName]?.responseTime;
+  // Check if the value exists
+  if (timeValue !== undefined && timeValue !== null) {
+    // Attempt to convert to number, default to 0 on failure (e.g., empty string)
+    // Keep the original string if it parses cleanly to a number > 0,
+    // or just pass the original string if AiCard handles strings.
+    // Let's assume AiCard might prefer a number for potential formatting.
+    const parsedTime = parseFloat(timeValue);
+    return isNaN(parsedTime) ? 0 : parsedTime; // Return number or 0
+  }
+  return 0; // Default to 0 if no timeValue exists
+};
 
 const chainSteps = computed(() => {
   return props.aiList.reduce((acc, ai) => {
